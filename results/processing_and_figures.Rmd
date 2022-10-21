@@ -1,0 +1,712 @@
+---
+title: "Blended model configuration update - analysis of results"
+author: "R. Chlumsky, J. Mai, J. R. Craig, B. A. Tolson"
+date: "2022-10-20"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+This Rmd file contains the code chunks (scripts) required to generate the figures in the manuscript for the updated blended model configuration study.
+
+# Setup Chunks
+
+## Setting Options and Loading Libraries
+
+```{r setup options, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE)
+library(knitr)
+library(kableExtra)
+options(warn = -1) 
+options(stringsAsFactors = F)
+```
+
+```{r load libraries}
+library(RavenR)
+library(xts)
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(ggplot2)
+library(ggpubr)
+library(purrr)
+library(scales)
+library(gridExtra)
+library(sf)
+library(maps)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(ggspatial)
+library(ggdist)
+library(ggrepel)
+library(forcats)
+```
+
+## Additional Function Declarations
+
+```{r additional support functions for producing figures}
+ggplotColours <- function(n = 6, h = c(0, 360) + 15){
+  if ((diff(h) %% 360) < 1) h[2] <- h[2] - 360/n
+  hcl(h = (seq(h[1], h[2], length = n)), c = 100, l = 65)
+}
+
+process_names <- list(
+  'snowbalance'="snow balance",
+  'quickflow'="quickflow",
+  'evapotranspiration'="evapotranspiration",
+  'baseflow'="baseflow",
+  'infiltration'='infiltration',
+  'ET'='ET'
+  )
+
+process_labeller <- function(variable,value){
+return(process_names[value])
+}
+
+process_labeller_mopex <- function(variable,value) {
+  # sprintf("MOPEX ID: %s", basins_chars$basin_id[value]) %>% 
+  # sprintf("MOPEX %i", value) %>% 
+  sprintf("MPX %i (%s)", value, basins_chars_2$state_full[value]) %>% 
+  return()
+}
+
+labeller_watershedID_type <- function(variable,value) {
+  # sprintf("MOPEX ID: %s", basins_chars$basin_id[value]) %>% 
+  # sprintf("MOPEX %i", value) %>% 
+  if (value %in% seq(1,12)) {
+    lbl <- sprintf("MPX %i (%s)", value, basins_chars_2$state_full[value])
+  } else {
+    lbl <- as.character(value)
+  }
+   
+  return(lbl)
+}
+
+labeller_watershedID_type_2 <- function(variable,value) {
+  # sprintf("MOPEX ID: %s", basins_chars$basin_id[value]) %>% 
+  # sprintf("MOPEX %i", value) %>% 
+  if (value %in% seq(13,24)) {
+    lbl <- sprintf("Basin ID %s (%s)", basins_chars_2$basin_id[value], basins_chars_2$state_full[value])
+  } else {
+    lbl <- as.character(value)
+  }
+   
+  return(lbl)
+}
+
+labeller_process_modelv <- function(variable,value) {
+  if (is.integer(value)) {
+    lbl <- sprintf("blend_v%i", value)
+  } else {
+    lbl <- as.character(value)
+  }
+  return(lbl)
+}
+
+scale_override <- function(which, scale) {
+  if(!is.numeric(which) || (length(which) != 1) || (which %% 1 != 0)) {
+    stop("which must be an integer of length 1")
+  }
+  
+  if(is.null(scale$aesthetics) || !any(c("x", "y") %in% scale$aesthetics)) {
+    stop("scale must be an x or y position scale")
+  }
+  
+  structure(list(which = which, scale = scale), class = "scale_override")
+}
+
+CustomFacetWrap <- ggproto(
+  "CustomFacetWrap", FacetWrap,
+  init_scales = function(self, layout, x_scale = NULL, y_scale = NULL, params) {
+    # make the initial x, y scales list
+    scales <- ggproto_parent(FacetWrap, self)$init_scales(layout, x_scale, y_scale, params)
+    
+    if(is.null(params$scale_overrides)) return(scales)
+    
+    max_scale_x <- length(scales$x)
+    max_scale_y <- length(scales$y)
+    
+    # ... do some modification of the scales$x and scales$y here based on params$scale_overrides
+    for(scale_override in params$scale_overrides) {
+      which <- scale_override$which
+      scale <- scale_override$scale
+      
+      if("x" %in% scale$aesthetics) {
+        if(!is.null(scales$x)) {
+          if(which < 0 || which > max_scale_x) stop("Invalid index of x scale: ", which)
+          scales$x[[which]] <- scale$clone()
+        }
+      } else if("y" %in% scale$aesthetics) {
+        if(!is.null(scales$y)) {
+          if(which < 0 || which > max_scale_y) stop("Invalid index of y scale: ", which)
+          scales$y[[which]] <- scale$clone()
+        }
+      } else {
+        stop("Invalid scale")
+      }
+    }
+    
+    # return scales
+    scales
+  }
+)
+
+facet_wrap_custom <- function(..., scale_overrides = NULL) {
+  # take advantage of the sanitizing that happens in facet_wrap
+  facet_super <- facet_wrap(...)
+  
+  # sanitize scale overrides
+  if(inherits(scale_overrides, "scale_override")) {
+    scale_overrides <- list(scale_overrides)
+  } else if(!is.list(scale_overrides) || 
+            !all(vapply(scale_overrides, inherits, "scale_override", FUN.VALUE = logical(1)))) {
+    stop("scale_overrides must be a scale_override object or a list of scale_override objects")
+  }
+  
+  facet_super$params$scale_overrides <- scale_overrides
+  
+  ggproto(NULL, CustomFacetWrap,
+          shrink = facet_super$shrink,
+          params = facet_super$params
+  )
+}
+```
+
+## Read Summarized Results
+
+```{r read in results}
+master_table_new <- read.csv("results_data_tabulated/summarized_results_performance_20220518.csv")
+
+master_params <- read.csv("results_data_tabulated/summarized_results_parameters_20220518.csv")
+
+master_weights <- read.csv("results_data_tabulated/summarized_results_weights_20220518.csv")
+```
+
+
+```{r reformat old and new into one simple dataframe}
+
+mtbl <-
+  master_table_new %>% 
+  as_tibble() %>%
+  dplyr::select(modelversion,watershedID,iteration,ends_with("kge")) %>%
+  pivot_longer(cols=ends_with("kge"), names_to="type", values_to="kge_metric") %>%
+  dplyr::select(modelversion, watershedID, iteration, kge_metric, type)
+
+```
+
+
+```{r filter data frames and prepare max_tbl}
+models_to_plot <- seq(0,37)
+models_for_paper <- c(0,2,seq(3,5), 7, seq(8,23), 26, 29, 30, seq(33,37)) # for paper
+num_models <- length(models_to_plot)
+
+mtbl <- mtbl %>% 
+  filter(modelversion %in% models_to_plot) %>% 
+  mutate(modelversion = as.factor(modelversion))
+
+master_weights <- master_weights %>% 
+  filter(modelversion %in% models_to_plot) %>% 
+  mutate(modelversion = as.factor(modelversion))
+
+# max calib and associated valid
+max_tbl <- mtbl %>% 
+  pivot_wider(values_from=kge_metric, names_from=type) %>% 
+  group_by(watershedID,modelversion) %>% 
+  # filter(modelversion ==18) %>%
+  filter(calib_kge == max(calib_kge)) %>% 
+  pivot_longer(cols=c(calib_kge,valid_kge),
+               values_to = "kge_metric", names_to="type")
+
+validgap_tbl <-
+  tidyr::pivot_wider(data=max_tbl, names_from=type, values_from=kge_metric) %>% 
+ mutate(validgap = calib_kge-valid_kge)
+
+# mean diff in max calib KGE and mean calib KGE
+temp <- mtbl %>% 
+  filter(type=="calib_kge") %>% 
+    group_by(modelversion,watershedID) %>% 
+    summarise(mean_calib_kge = mean(kge_metric))
+
+meandiff_tbl <- max_tbl %>%
+  filter(type=="calib_kge") %>% 
+  mutate(max_kge = kge_metric) %>% 
+  # left_join(x=., y=temp, by=c(modelversion, watershedID))
+  merge(x=., y=temp, by=c("modelversion", "watershedID"))
+  
+meandiff_tbl$meandiff <- meandiff_tbl$max_kge - meandiff_tbl$mean_calib_kge
+
+perftbl <- merge(x=validgap_tbl, y=meandiff_tbl, by=c("modelversion", "watershedID"))
+
+```
+
+# MOPEX12 Catchments
+
+## MOPEX12 Map
+
+```{r MOPEX characteristics}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+basins_chars <- read.table("../setup/basin_physical_characteristics.txt", sep=";", header = TRUE)
+
+basins_chars %>% 
+  mutate(catchid = row_number()) %>% 
+  mutate(state = RavenR::rvn_substrRight(basin_name,2)) ->
+  basins_chars_2
+
+basins_chars_2$basin_name <- str_to_title(basins_chars_2$basin_name)
+
+basins_chars_2$state_full <- c("West Virginia","Maryland","Virginia","West Virginia","West Virginia","Indiana","North Carolina",
+                              "Idaho","Missouri","Louisiana","Texas","Texas",
+                              "Maine","Conneticut","New York","Mississippi","Tennessee","Utah",
+                              "California","California","California","Idaho","Idaho","Idaho")
+basins_chars_2$basin_id <- sprintf("%08d", basins_chars_2$basin_id)
+```
+
+```{r manuscript figure - MOPEX map with new basins}
+
+# set basin type 
+basins_chars_2$basintype <- c(rep("MOPEX", 12), rep("NEWCATCHMENTS",12))
+
+## plot map of randomly selected additional stations
+p1 <- world %>% 
+  filter(continent == "North America") %>% 
+  ggplot(data = .) +
+  geom_sf() +
+  geom_sf(data = states, fill = NA, size=0.1) + 
+  xlab("Longitude") + ylab("Latitude") +
+  # geom_text(data= basins_chars,aes(x=lat, y=lon, label=forest_frac),
+  #   color = "darkblue", fontface = "bold", check_overlap = FALSE) +
+  geom_point(data=basins_chars_2, aes(x=lon, y=lat, fill=basintype), color='black',size=2, shape=23)+
+  scale_fill_manual(values=c("red","purple"), breaks=c("MOPEX","NEWCATCHMENTS"), name="",
+                    labels=c("MOPEX12 catchments",
+                             "Additional catchments"))+
+  annotation_north_arrow(location = "bl", which_north = "true", 
+                         style = north_arrow_fancy_orienteering) +
+  geom_label_repel(data=basins_chars_2, aes(x=lon, y=lat),
+                   label = sprintf("%s (%i)",basins_chars_2$state, basins_chars_2$catchid),
+                   box.padding=0.5, fill="white", force=2,
+                   size=1.5, max.overlaps = 30,
+                   nudge_y = c(rep(0,22),0.1,0),
+                   color="black") +
+  coord_sf(xlim = c(-125, -65), ylim = c(25, 50), expand = FALSE)+ 
+  theme(legend.position = "bottom", legend.direction = 'horizontal')
+  
+p1
+
+p1 %>% 
+  ggsave("figures/selected_random_catchments_20221021.pdf", plot=., width=5, height=5)
+```
+
+```{r manuscript table - properties for newly selected stations}
+basins_chars_2[13:24,] %>% 
+  
+  select(basin_id, basin_name,area_km2) %>% 
+  kable(., 
+        digits=1, # digits doesn't work once converted to kable highlighting
+        align='rrcc',
+        format="latex",
+        escape=FALSE,
+        caption="test caption") %>% 
+  kable_minimal(full_width=FALSE)
+```
+
+
+# Results 
+
+## Overall performance of blended model configurations
+
+```{r overview performance}
+
+# max calib (avg) and max valid performances
+mtbl %>% 
+  arrange(modelversion,watershedID,iteration,type) %>% 
+  group_by(watershedID,modelversion,type) %>% 
+  filter(modelversion %in% c(0,36)) %>%
+  
+  filter(kge_metric == max(kge_metric)) %>%
+  # filter(watershedID %in% seq(13,24)) %>% 
+  arrange(modelversion,watershedID,type) %>% 
+  group_by(modelversion,type) %>%
+  summarise(mean_kge=mean(kge_metric)) %>%
+  data.frame()
+
+# mean and max overall calibration performances
+mtbl %>% 
+  arrange(modelversion,watershedID,iteration,type) %>% 
+  group_by(modelversion,type) %>% 
+  # filter(modelversion %in% c(0, 29,30,34,35,36)) %>%
+  filter(modelversion %in% c(26,29)) %>%
+  
+  # filter(type=="calib_kge") %>% 
+  summarise(mean_kge=mean(kge_metric), max_kge=max(kge_metric))
+
+# mean/sd of max performances in each catchment
+max_tbl %>% 
+  # filter(modelversion %in% c(0, 29,30,34,35,36)) %>%
+  filter(type=="calib_kge") %>% 
+  filter(modelversion %in% c(4,7)) %>%
+  group_by(modelversion) %>% 
+  summarise(mean_kge = mean(kge_metric), min_kge=min(kge_metric), max_kge = max(kge_metric), sd_kge=sd(kge_metric)) %>% 
+  data.frame()
+
+# performance overall for given model
+max_tbl %>% 
+  filter(modelversion %in% c(34,36,37)) %>%
+  group_by(modelversion,type) %>% 
+  # filter(watershedID %in% seq(1,8)) %>%
+  summarise(mean_kge = mean(kge_metric), max_kge = max(kge_metric), min_kge=min(kge_metric), sd_kge=sd(kge_metric))
+ 
+# performance of models 0 and 37 in new catchments
+mtbl %>% 
+  filter(modelversion %in% c(0,36)) %>% 
+  # filter(watershedID %in% seq(13,24)) %>% 
+  filter(watershedID %in% seq(1,12)) %>% 
+  
+  group_by(modelversion,watershedID,type) %>% 
+  summarise(mean_kge = mean(kge_metric), max_kge = max(kge_metric), min_kge=min(kge_metric), sd_kge=sd(kge_metric)) %>% 
+  # filter(type == "valid_kge") %>% 
+  group_by(modelversion, type) %>% 
+  summarize(meanmean = mean(mean_kge), meanmax = mean(max_kge)) %>% 
+  as.data.frame()
+
+```
+
+
+```{r manuscript figures - overall performance}
+## unranked model performance by version
+p13 <-
+  perftbl %>% 
+  filter(modelverison %in% models_for_paper) %>% 
+    group_by(modelversion) %>% 
+    summarise(mean_validgap=mean(validgap), mean_meandiff = mean(meandiff), mean_valid_kge = mean(valid_kge),
+              mean_maxkge=mean(max_kge), mean_mean_calib_kge=mean(mean_calib_kge)) %>% 
+    # arrange(desc(mean_maxkge), desc(mean_valid_kge)) %>% 
+    # mutate(rank=seq(1,nrow(.))) %>% 
+    pivot_longer(cols = c(mean_maxkge,mean_valid_kge), names_to="metric_type", values_to="metric_value") %>% 
+  ggplot(aes(x=as.factor(modelversion), y=metric_value, group=metric_type, color=metric_type))+
+    geom_point(aes(shape=metric_type))+
+    geom_line()+
+    # geom_label_repel(aes(label=modelversion), point.padding = 0.5, show.legend = FALSE,size=2,force=1.5)+
+    xlab("Model version")+
+    ylab("KGE")+
+    ylim(c(0.7,0.95))+
+    scale_color_manual(name="Metric",
+                       values=c('black','orange'),
+                       labels=c("max calib\nKGE (avg)", "valid\nKGE (avg)"))+
+    scale_shape_manual(name="Metric",
+                       values=as.factor(c(1,2)),
+                       labels=c("max calib\nKGE (avg)", "valid\nKGE (avg)"))+
+  theme(legend.position = 'bottom')
+    
+p13
+
+p13 %>% 
+  ggsave(filename="figures/performance_maxcalib_valid_bymodelversion_notranked_20220413.pdf",
+         plot=.,
+         units="in", height=4, width=7)
+
+
+## calibration kge with validation points ----
+models_temp <- c(0,2,3,7,15,24,29,36)
+# models_temp <- c(0,36)
+
+
+p6 <-
+  mtbl %>% 
+  filter(type == "calib_kge") %>%
+  # filter watersheds
+  filter(watershedID %in% seq(1,12)) %>%
+  mutate(name = fct_reorder(modelversion, desc(as.numeric(modelversion)))) %>%
+  
+  filter(modelversion %in% models_temp) %>%
+  filter(watershedID %in% seq(1,12)) %>%
+  ggplot() +
+  geom_boxplot(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.4 )+
+  geom_point(data=max_tbl[max_tbl$type=="valid_kge" & max_tbl$modelversion %in% models_temp & max_tbl$watershedID %in% seq(1,12),], 
+             aes(x=kge_metric, y=modelversion, colour=as.factor(type)),
+             size=1)+
+  facet_wrap(~watershedID,  ncol=4, scales="free", labeller = labeller_watershedID_type)+ # 
+  xlab("KGE") + 
+  scale_fill_manual(name="Model\nVersion",
+                    labels=sprintf("model_v%i",models_temp),
+                    values=ggplotColours(n=length(models_temp)))+
+  scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
+                      values=c('red'))+
+  # theme(legend.position = "bottom")+
+  theme(legend.position = "none")+
+  ylab("Model Version")+
+  xlim(c(0.55,0.95))
+ 
+p6 %>% 
+  # ggsave(filename="figures_KGE/performance_calib_modelv0-36xlimfixed_20211202.pdf", plot=.,
+  #        units="in", height=16, width=12)
+  ggsave(filename="figures/performance_calib_modelv0-37xlimfixed_select_20220413.pdf", plot=.,
+         units="in", height=5.5, width=7)
+```
+
+## Overfitting analysis
+
+```{r get number of params for each modelverison}
+
+tied_param_cols <- master_params %>% 
+  filter(watershedID==1) %>% 
+  select(-c(watershedID,iteration)) %>% 
+  select(-contains('sum')) %>% 
+  select(-contains('nw')) %>% 
+  select(-contains('half')) %>% 
+  select(-contains('pow')) %>% 
+  select(-contains('prod')) %>% 
+  select(-contains('ratio'))
+      
+tied_param_cols %>% 
+  group_by(modelversion)
+
+not_all_na <- function(x) any(!is.na(x))
+
+param_nums <- data.frame(matrix(NA,
+                          nrow=length(unique(master_params$modelversion)),
+                          ncol=2))
+names(param_nums) <- c("modelversion","param_count")
+param_nums$modelversion <- unique(master_params$modelversion)
+
+
+for (i in unique(master_params$modelversion) ) {
+  param_nums[param_nums$modelversion == i,2] <- tied_param_cols %>% 
+            filter(modelversion == i) %>% 
+             select(where(not_all_na)) %>% 
+              select(-modelversion) %>% 
+                ncol()
+}
+
+param_nums
+
+write.csv(param_nums,
+          "param_counts_by_modelversion.csv",
+          quote=FALSE, row.names = FALSE)
+
+```
+
+
+```{r manuscript figures and analysis - overfitting check}
+
+# note that modelversion 24 (conglomerate model) excluded
+param_nums$modelversion <- as.factor(param_nums$modelversion)
+param_data <- left_join(max_tbl, param_nums, by="modelversion")
+
+param_data$watershedID <- as.factor(param_data$watershedID)
+
+param_data <- param_data %>% 
+  filter(watershedID %in% seq(1,12)) %>% 
+  filter(modelversion %in% models_for_paper)
+
+fit <- param_data %>% 
+  filter(type == "valid_kge") %>% 
+  lm(kge_metric ~ param_count, data=.)
+
+summary(fit)
+
+p3 <-
+  param_data %>% 
+  filter(type == "valid_kge") %>% 
+    ggplot(aes(x=param_count, y=kge_metric))+
+  geom_point(data=param_data, aes(color=modelversion, shape=watershedID))+
+  geom_smooth(method = "lm")+
+  # facet_wrap(~type+watershedID, scales="free_y")+
+  scale_shape_manual(values=1:12) +
+  theme(legend.position="none")+
+  ylab("Validation KGE")+
+  xlab("Number of Calibrated Parameters")
+
+p3
+
+ggsave(sprintf("figures/kge_paramcount_notoverfit_20220416.pdf") ,
+                 plot=p3,units="in", height=4, width=5)
+
+## statistical tests for each model watershed
+
+run_regression_bywatershed <- function(df=NULL, watershed=1) {
+  
+  temp <- df %>% 
+   filter(type == "valid_kge") %>% 
+  filter(watershedID == watershed)
+
+  fit <- lm(kge_metric ~ param_count, data=temp)
+  
+  rv <-  data.frame(t(c(coef(fit), summary(fit)$coefficients[2,4])))
+  colnames(rv) <- c("intercept","slope","slope_pvalue")
+  
+  return(rv)
+}
+
+dd <- lapply(1:12, function(x) run_regression_bywatershed(df=param_data, watershed=x)) 
+dd <- as.data.frame(do.call(rbind,dd))
+dd$watershedID <- seq(1,12)
+dd$watershed_desc <- sprintf("%s (%s)", basins_chars_2$basin_id[1:12], basins_chars_2$state_full[1:12])
+
+
+## make nice table
+dd %>% 
+  select(watershedID, watershed_desc, slope, slope_pvalue, intercept) %>% 
+  format(scientific=TRUE, digits=3) %>% 
+  # mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
+  # mutate_if(is.numeric, format(scientific=TRUE)) %>% data.frame()
+  
+ kable(., 
+        digits=4, # digits doesn't work once converted to kable highlighting
+        align='rccc',
+        format="latex",
+        escape=FALSE,
+        caption="test caption") %>% 
+  kable_minimal(full_width=FALSE)
+```
+
+## Pareto evaluation of model versions
+
+```{r manuscript figure - pareto evaluation of model versions}
+
+temp <- perftbl %>% 
+    filter(watershedID %in% seq(1,12)) %>% 
+    filter(modelversion %in% models_for_paper) %>% 
+    group_by(modelversion) %>% 
+    summarise(mean_validgap=mean(validgap), mean_meandiff = mean(meandiff),
+              mean_maxkge=mean(max_kge), mean_mean_calib_kge=mean(mean_calib_kge))
+
+pareto <- temp %>% 
+  filter(modelversion %in% c(36,37,34,29,30))
+
+p10 <-
+  ggplot(data=temp, aes(x=mean_validgap, y=mean_meandiff))+ # , color=as.factor(modelversion)
+    geom_point()+
+    geom_text_repel(aes(label=modelversion),
+      size=2,
+      arrow = NULL, # arrow(length = unit(0.02, "npc")),
+      # segment.color = NA,
+      min.segment.length = 0,
+      force=0.5,
+      box.padding = 0.75
+    )+
+    xlab("Validation Gap (max KGE calib - valid)")+
+    ylab("Calibration Consistency (max KGE - mean KGE)")+
+  geom_line(data=pareto, aes(x=mean_validgap, y=mean_meandiff), color='black', linetype='dashed')+
+    theme(legend.position='none')+
+    xlim(c(0.10,0.14))+  # check bounds
+    ylim(c(0.00,0.04))   # check bounds
+
+p10
+
+
+## by average max calib KGE and average valid KGE
+temp <- perftbl %>% 
+  filter(watershedID %in% seq(1,12)) %>% 
+    filter(modelversion %in% models_for_paper) %>% 
+  group_by(modelversion) %>% 
+    summarise(mean_max_calib_kge=mean(calib_kge), 
+              mean_valid_kge=mean(valid_kge)) 
+
+p12 <-
+  ggplot(data=temp, aes(x=mean_valid_kge, y=mean_max_calib_kge))+ # , color=as.factor(modelversion)
+    geom_point()+
+    geom_text_repel(aes(label=modelversion),
+          size=3,
+          arrow = arrow(length = unit(0.01, "npc")), force=0.5,
+          box.padding = 0.75
+    )+
+    xlab("Mean Validation KGE")+
+    ylab("Mean of Max Calibration KGE")+
+    theme(legend.position='none')+
+    scale_x_reverse(limits=c(0.825,0.725))+
+    scale_y_reverse(limits=c(0.925,0.825))
+
+p12
+
+
+p10 <- p10 + 
+  # annotate(aes(x=0.1,y=0.035,))
+ annotate("text",x=-Inf,y=Inf,label="(A)",fontface="bold",size=6, hjust=-0.1,vjust=1.2)
+
+p12 <- p12 + 
+  # annotate(aes(x=0.1,y=0.035,))
+ annotate("text",x=Inf,y=-Inf,label="(B)",fontface="bold",size=6, hjust=-0.1,vjust=1.2)
+
+## p10 and p12 in one pareto type plot
+list(p10,p12) %>% 
+ ggarrange(plotlist=., align='v', ncol=1, common.legend=FALSE) %>% 
+  ggsave(sprintf("figures_KGE/performance_pareto_combined_20220413.pdf") ,
+                 plot=.,units="in", height=8, width=5.5)
+```
+
+
+# Evaluation for new catchments
+
+## Evaluation of selected model version for new catchments
+
+```{r manuscript figure - comparison for newcatchments}
+## watersheds 13-24
+models_temp <- c(0,36)
+p15 <-
+  mtbl %>% 
+  filter(type == "calib_kge") %>%
+  mutate(name = fct_reorder(modelversion, desc(as.numeric(modelversion)))) %>%
+  
+  filter(modelversion %in% models_temp) %>%
+  filter(watershedID %in% seq(13,24)) %>%
+  ggplot() +
+  geom_boxplot(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.4 )+
+  geom_point(data=max_tbl[max_tbl$type=="valid_kge" & max_tbl$modelversion %in% models_temp & max_tbl$watershedID %in% seq(13,24),], 
+             aes(x=kge_metric, y=modelversion, colour=as.factor(type)),
+             size=1)+
+  facet_wrap(~watershedID,  ncol=4, scales="free", labeller = labeller_watershedID_type_2)+ # 
+  xlab("KGE") + 
+  scale_fill_manual(name="Model\nVersion",
+                    labels=sprintf("model_v%i",models_temp),
+                    values=ggplotColours(n=length(models_temp)))+
+  scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
+                      values=c('red'))+
+  theme(legend.position = "none")+
+  ylab("Model Version")+
+  xlim(c(0.7,0.95))
+
+p15
+
+p15 %>% 
+  ggsave(filename="figures/performance_calib_newcatchments_modelv0_modelv36_xlimfixed_select_20220519.pdf", plot=.,
+         units="in", height=5.5, width=10)
+
+```
+
+```{r manuscript figure - comparison for newcatchments}
+## watersheds 13-24
+models_temp <- c(0,36)
+p15 <-
+  mtbl %>% 
+  filter(type == "calib_kge") %>%
+  mutate(name = fct_reorder(modelversion, desc(as.numeric(modelversion)))) %>%
+  
+  filter(modelversion %in% models_temp) %>%
+  filter(watershedID %in% seq(13,24)) %>%
+  ggplot() +
+  geom_boxplot(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.8, width=0.4 )+
+  ggdist::stat_halfeye(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.8, adjust=0.75, justification=-.3, .width=0, point_colour=NA )+
+  geom_point(data=max_tbl[max_tbl$type=="valid_kge" & max_tbl$modelversion %in% models_temp & max_tbl$watershedID %in% seq(13,24),], 
+             aes(x=kge_metric, y=modelversion, colour=as.factor(type)),
+             size=1)+
+  facet_wrap(~watershedID,  ncol=4, scales="free", labeller = labeller_watershedID_type_2)+ # 
+  xlab("KGE") + 
+  scale_fill_manual(name="Model\nVersion",
+                    labels=sprintf("model_v%i",models_temp),
+                    values=ggplotColours(n=length(models_temp)))+
+  scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
+                      values=c('red'))+
+  theme(legend.position = "none")+
+  ylab("Model Version")+
+  xlim(c(0.7,0.95))
+
+p15
+
+p15 %>% 
+  ggsave(filename="figures/performance_calib_newcatchments_modelv0_modelv36_xlimfixed_select_withdists_20220519.pdf", plot=.,
+         units="in", height=5.5, width=10)
+
+```
+

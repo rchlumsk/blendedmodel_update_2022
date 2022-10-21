@@ -1,0 +1,149 @@
+ProgramType  DDS
+ObjectiveFunction  GCOP
+
+# Linux version
+ModelExecutable  ./ost_raven.sh
+PreserveBestModel ./ost_savebest.sh
+
+# Windows version
+# ModelExecutable  ost_raven.bat
+# PreserveBestModel ost_savebest.bat
+
+BeginFilePairs   
+# 
+./templates/modelname.rvi.tpl	./model/modelname.rvi
+./templates/modelname.rvp.tpl	./model/modelname.rvp
+./templates/modelname.rvt.tpl	./model/modelname.rvt
+#./templates/modelname.rvh.tpl	./model/modelname.rvh
+./templates/modelname.rvc.tpl	./model/modelname.rvc
+#
+EndFilePairs
+
+#Parameter/DV Specification
+BeginParams
+  # parameter      init.    low      high    tx_in  tx_ost  tx_out
+  #
+  par_x01         0.5      0.0       1.0    none   none     none # LandUseParameterList:    HMETS_RUNOFF_COEFF
+  par_x04        -2.0     -5.0      -1.0    none   none     none # SoilParameterList:       BASEFLOW_COEFF TOPSOIL
+  par_x05         0.5      0.0     100.0    none   none     none # SoilParameterList:       MAX_BASEFLOW_RATE TOPSOIL
+  par_x06         0.5      0.5       2.0    none   none     none # SoilParameterList:       BASEFLOW_N TOPSOIL
+  par_x38         0.5      0.0       1.0    none   none     none # SoilParameterList:       BASEFLOW_THRESH TOPSOIL
+  par_x53         0.1      0.0       6.0    none   none     none # SoilParameterList:       MAX_CAP_RISE_RATE TOPSOIL
+  #
+  par_x08         0.0      0.0       3.0    none   none     none # SoilParameterList:       PET_CORRECTION TOPSOIL
+  par_x09         0.01     0.0       0.05   none   none     none # SoilParameterList:       SAT_WILT TOPSOIL
+  par_x10         0.45     0.0       0.45   none   none     none # SoilParameterList:       FIELD_CAPACITY TOPSOIL = SAT_WILT TOPSOIL + x9
+  #
+  par_x11        -3.0     -5.0      -2.0    none   none     none # SoilParameterList:       BASEFLOW_COEFF PHREATIC
+  par_x12         0.5      0.5       2.0    none   none     none # SoilParameterList:       BASEFLOW_N PHREATIC
+  par_x39         0.5      0.0       1.0    none   none     none # SoilParameterList:       BASEFLOW_THRESH PHREATIC
+  par_x44         0.5      0.0     100.0    none   none     none # SoilParameterList:       MAX_BASEFLOW_RATE PHREATIC
+  par_x54         0.1      0.0      12.0    none   none     none # SoilParameterList:       MAX_CAP_RISE_RATE PHREATIC
+  #
+  par_x18         1.0      0.0       5.0    none   none     none # LandUseParameterList:    REFREEZE_FACTOR
+  par_x19         0.0      0.0       0.4    none   none     none # GlobalParameter:         SNOW_SWI
+  #
+  par_x40        -1.0     -3.0       0.0    none   none     none # LandUseParameterList:    DEP_SEEP_K    [1/d]       
+  par_x41         0.05     0.0       1.0    none   none     none # LandUseParameterList:    ABST_PERCENT
+  par_x42         2.0      0.0      10.0    none   none     none # LandUseParameterList:    DEP_MAX
+  par_x55         0.5      0.0       1.0    none   none     none # percentage decrease in SeasonalRelativeLAI from prescribed amounts
+  #
+  par_x20         3.0      2.0       7.0    none   none     none # LandUseParameterList:    GAMMA_SHAPE
+  par_ratio_x21   0.2      0.125     2.0    none   none     none # LandUseParameterList:    1 / GAMMA_SCALE
+  par_x22         3.0      2.0       15.0   none   none     none # LandUseParameterList:    GAMMA_SHAPE2
+  par_ratio_x23   0.2      0.125     10.0   none   none     none # LandUseParameterList:    1 / GAMMA_SCALE2
+  par_x24         1.5      1.5       3.0    none   none     none # LandUseParameterList:    MIN_MELT_FACTOR
+  par_x25         1.0      0.0       5.0    none   none     none # LandUseParameterList:    MAX_MELT_FACTOR = MIN_MELT_FACTOR + x06
+  par_x26         0.0     -1.0       1.0    none   none     none # LandUseParameterList:    DD_MELT_TEMP
+  par_x27         0.1      0.01      0.2    none   none     none # LandUseParameterList:    DD_AGGRADATION
+  par_x48         0.5      0.0       0.99   none   none     none # LandUseParameterList:    FOREST_SPARSENESS
+  #
+  par_x49         0.05      0.0     0.20   none   none     none # VegetationParameterList:    RAIN_ICEPT_PCT
+  par_x52         1.0       0.0     10.0   none   none     none # VegetationParameterList:    MAX_CAPACITY
+  par_x56         1.2      1.0      1.5   none   none     none # Vegetation Parameter - multiplier for rain -> snow for capacity and icept
+  #
+  par_x28         0.01     0.00001   0.02   none   none     none # SoilParameterList:       PERC_COEFF TOPSOIL
+  par_x29         0.1      0.0       0.5    none   none     none # SoilProfiles:            thickness TOPSOIL (m)
+  par_x30         0.1      0.0       2.0    none   none     none # SoilProfiles:            thickness PHREATIC (m)
+  par_x31         0.0     -3.0       3.0    none   none     none # GlobalParameter:         RAINSNOW_TEMP (dC)
+  par_x32         1.0      0.5       4.0    none   none     none # GlobalParameter:         RAINSNOW_DELTA (dC)
+  # 
+  par_x33         1.0      0.8       1.2    none   none     none # Gauge:                   RAINCORRECTION
+  par_x34         1.0      0.8       1.2    none   none     none # Gauge:                   SNOWCORRECTION
+  par_x35         0.001    0.0       0.02   none   none     none # SoilParameterList:       PERC_COEFF PHREATIC
+  #
+  par_x68	 	  0.5556   0.0       1.0    none   none     none # ProcessWeights:          process weight
+  par_x70	 	  0.5556   0.0       1.0    none   none     none # ProcessWeights:          process weight
+  par_x71	 	  0.5      0.0       1.0    none   none     none # ProcessWeights:          process weight
+  par_x72	 	  0.5556   0.0       1.0    none   none     none # ProcessWeights:          process weight
+  # 
+  par_x76	 	  0.5      0.0       1.0    none   none     none # ProcessWeights:          forcing PET un-normalized weight
+  par_x77	 	  0.5      0.0       1.0    none   none     none # ProcessWeights:          forcing PET un-normalized weight
+  par_x79	 	  0.5      0.0       1.0    none   none     none # ProcessWeights:          forcing POTMELT un-normalized weight
+  #
+EndParams   
+
+BeginTiedParams
+  #
+  par_one 0 1.000 free
+  #
+  par_sum_x24_x25 2 par_x24 par_x25 linear 0.00 1.00 1.00 0.00 free
+  par_half_x25 	  1 par_x25  		linear 0.5     0.00 	   free
+  par_sum_x24_halfx25  2 par_x24 par_half_x25 linear 0.00 1.00 1.00 0.00 free
+  par_sum_x09_x10 2 par_x09 par_x10 linear 0.00 1.00 1.00 0.00 free
+  par_pow_x04     1 par_x04         exp    10.0 1.00 1.00 0.00 free
+  par_pow_x11     1 par_x11         exp    10.0 1.00 1.00 0.00 free
+  par_half_x29 	  1 par_x29  		linear 500.0     0.00 	   free
+  par_half_x30 	  1 par_x30  		linear 500.0     0.00 	   free
+  par_pow_x40     1 par_x40         exp    10.0 1.00 1.00 0.00 free
+  par_prod_x49_x56 2 par_x49 par_x56 linear 1.00 0.00 0.00 0.00 free
+  par_prod_x52_x56 2 par_x52 par_x56 linear 1.00 0.00 0.00 0.00 free
+  #
+  par_x21     2 par_one par_ratio_x21 ratio 1.00 0.00 1.00 0.00 free
+  par_x23     2 par_one par_ratio_x23 ratio 1.00 0.00 1.00 0.00 free
+  #
+  ## SeasonalRelativeLAI calculations
+  par_sum_RLAI_01 1   par_x55   linear   -0.8   1.0   free 
+  par_sum_RLAI_02 1   par_x55   linear   -0.8   1.0   free 
+  par_sum_RLAI_03 1   par_x55   linear   -0.7   1.0   free 
+  par_sum_RLAI_04 1   par_x55   linear   -0.5   1.0   free 
+  par_sum_RLAI_05 1   par_x55   linear   -0.3   1.0   free 
+  par_sum_RLAI_06 1   par_x55   linear   -0.1   1.0   free 
+  par_sum_RLAI_07 1   par_x55   linear    0.0   1.0   free 
+  par_sum_RLAI_08 1   par_x55   linear    0.0   1.0   free 
+  par_sum_RLAI_09 1   par_x55   linear   -0.2   1.0   free 
+  par_sum_RLAI_10 1   par_x55   linear   -0.4   1.0   free 
+  par_sum_RLAI_11 1   par_x55   linear   -0.6   1.0   free 
+  par_sum_RLAI_12 1   par_x55   linear   -0.7   1.0   free 
+  #
+EndTiedParams  
+
+BeginResponseVars
+#name	filename								keyword		line	col	token	augmented?
+  KGE	./model/output/Diagnostics.csv ;	OST_NULL	1		3	','		yes
+EndResponseVars 
+
+BeginTiedRespVars
+  NegKGE 1 KGE wsum -1.00
+EndTiedRespVars
+
+BeginGCOP
+CostFunction NegKGE
+PenaltyFunction APM
+EndGCOP
+
+BeginConstraints
+# not needed when no constraints, but PenaltyFunction statement above is required
+#name     type     penalty    lwr   upr   resp.var
+EndConstraints
+
+# Randomseed control added
+#RandomSeed 123456789
+
+BeginDDSAlg
+PerturbationValue 0.20
+MaxIterations 1
+UseRandomParamValues
+# UseInitialParamValues
+EndDDSAlg
+
