@@ -19,6 +19,7 @@ library(knitr)
 library(kableExtra)
 options(warn = -1) 
 options(stringsAsFactors = F)
+options(pillar.sigfig = 5)
 ```
 
 ```{r load libraries}
@@ -196,26 +197,36 @@ mtbl <-
 
 
 ```{r filter data frames and prepare max_tbl}
-models_to_plot <- seq(0,37)
-models_for_paper <- c(0,2,seq(3,5), 7, seq(8,23), 26, 29, 30, seq(33,37)) # for paper
-num_models <- length(models_to_plot)
+models_all <- c(seq(0,23),24,29,30, seq(33,37))
+models_for_paper <- c(seq(0,23),29,30, seq(33,37)) # for paper
 
 mtbl <- mtbl %>% 
-  filter(modelversion %in% models_to_plot) %>% 
+  filter(modelversion %in% models_all) %>% 
   mutate(modelversion = as.factor(modelversion))
 
 master_weights <- master_weights %>% 
-  filter(modelversion %in% models_to_plot) %>% 
+  filter(modelversion %in% models_all) %>% 
   mutate(modelversion = as.factor(modelversion))
 
 # max calib and associated valid
 max_tbl <- mtbl %>% 
   pivot_wider(values_from=kge_metric, names_from=type) %>% 
   group_by(watershedID,modelversion) %>% 
-  # filter(modelversion ==18) %>%
   filter(calib_kge == max(calib_kge)) %>% 
   pivot_longer(cols=c(calib_kge,valid_kge),
                values_to = "kge_metric", names_to="type")
+
+## for modelversion==0 and watershedID==14, two trials with exact same calibration KGE to 6 digits
+## take one with higher validation (iteration 5 validation is higher than 15)
+
+# look for duplicates
+max_tbl %>% 
+  group_by(modelversion,watershedID,type,kge_metric) %>% 
+  filter(n()>1)
+
+# remove max_tbl with iteration 15 for watershedID 14 and modelversion 0 (the lower validation score)
+max_tbl <- max_tbl[-(which(max_tbl$modelversion == 0 & max_tbl$watershedID==14 & max_tbl$iteration==15)),]
+
 
 validgap_tbl <-
   tidyr::pivot_wider(data=max_tbl, names_from=type, values_from=kge_metric) %>% 
@@ -230,13 +241,11 @@ temp <- mtbl %>%
 meandiff_tbl <- max_tbl %>%
   filter(type=="calib_kge") %>% 
   mutate(max_kge = kge_metric) %>% 
-  # left_join(x=., y=temp, by=c(modelversion, watershedID))
   merge(x=., y=temp, by=c("modelversion", "watershedID"))
   
 meandiff_tbl$meandiff <- meandiff_tbl$max_kge - meandiff_tbl$mean_calib_kge
 
 perftbl <- merge(x=validgap_tbl, y=meandiff_tbl, by=c("modelversion", "watershedID"))
-
 ```
 
 # MOPEX12 Catchments
@@ -275,12 +284,13 @@ p1 <- world %>%
   geom_sf() +
   geom_sf(data = states, fill = NA, size=0.1) + 
   xlab("Longitude") + ylab("Latitude") +
-  # geom_text(data= basins_chars,aes(x=lat, y=lon, label=forest_frac),
-  #   color = "darkblue", fontface = "bold", check_overlap = FALSE) +
-  geom_point(data=basins_chars_2, aes(x=lon, y=lat, fill=basintype), color='black',size=2, shape=23)+
+  geom_point(data=basins_chars_2, aes(x=lon, y=lat, fill=basintype, shape=basintype), color='black',size=2)+
   scale_fill_manual(values=c("red","purple"), breaks=c("MOPEX","NEWCATCHMENTS"), name="",
                     labels=c("MOPEX12 catchments",
-                             "Additional catchments"))+
+                             "Additional independent catchments"))+
+  scale_shape_manual(values=c(21,22), breaks=c("MOPEX","NEWCATCHMENTS"), name="",
+                    labels=c("MOPEX12 catchments",
+                             "Additional independent catchments"))+
   annotation_north_arrow(location = "bl", which_north = "true", 
                          style = north_arrow_fancy_orienteering) +
   geom_label_repel(data=basins_chars_2, aes(x=lon, y=lat),
@@ -318,14 +328,23 @@ basins_chars_2[13:24,] %>%
 
 ```{r overview performance}
 
-# max calib (avg) and max valid performances
+# average improvement over original model in MOPEX basins
 mtbl %>% 
   arrange(modelversion,watershedID,iteration,type) %>% 
   group_by(watershedID,modelversion,type) %>% 
   filter(modelversion %in% c(0,36)) %>%
-  
-  filter(kge_metric == max(kge_metric)) %>%
-  # filter(watershedID %in% seq(13,24)) %>% 
+  filter(watershedID %in% seq(1,12)) %>%
+  arrange(modelversion,watershedID,type) %>% 
+  group_by(modelversion,type) %>%
+  summarise(mean_kge=mean(kge_metric)) %>%
+  data.frame()
+
+# average improvement over original model in 12 new basins
+mtbl %>% 
+  arrange(modelversion,watershedID,iteration,type) %>% 
+  group_by(watershedID,modelversion,type) %>% 
+  filter(modelversion %in% c(0,36)) %>%
+  filter(watershedID %in% seq(13,24)) %>%
   arrange(modelversion,watershedID,type) %>% 
   group_by(modelversion,type) %>%
   summarise(mean_kge=mean(kge_metric)) %>%
@@ -335,7 +354,6 @@ mtbl %>%
 mtbl %>% 
   arrange(modelversion,watershedID,iteration,type) %>% 
   group_by(modelversion,type) %>% 
-  # filter(modelversion %in% c(0, 29,30,34,35,36)) %>%
   filter(modelversion %in% c(26,29)) %>%
   
   # filter(type=="calib_kge") %>% 
@@ -343,9 +361,7 @@ mtbl %>%
 
 # mean/sd of max performances in each catchment
 max_tbl %>% 
-  # filter(modelversion %in% c(0, 29,30,34,35,36)) %>%
   filter(type=="calib_kge") %>% 
-  filter(modelversion %in% c(4,7)) %>%
   group_by(modelversion) %>% 
   summarise(mean_kge = mean(kge_metric), min_kge=min(kge_metric), max_kge = max(kge_metric), sd_kge=sd(kge_metric)) %>% 
   data.frame()
@@ -354,18 +370,14 @@ max_tbl %>%
 max_tbl %>% 
   filter(modelversion %in% c(34,36,37)) %>%
   group_by(modelversion,type) %>% 
-  # filter(watershedID %in% seq(1,8)) %>%
   summarise(mean_kge = mean(kge_metric), max_kge = max(kge_metric), min_kge=min(kge_metric), sd_kge=sd(kge_metric))
  
-# performance of models 0 and 37 in new catchments
+# performance of models 0 and 36 in new catchments
 mtbl %>% 
   filter(modelversion %in% c(0,36)) %>% 
-  # filter(watershedID %in% seq(13,24)) %>% 
   filter(watershedID %in% seq(1,12)) %>% 
-  
   group_by(modelversion,watershedID,type) %>% 
   summarise(mean_kge = mean(kge_metric), max_kge = max(kge_metric), min_kge=min(kge_metric), sd_kge=sd(kge_metric)) %>% 
-  # filter(type == "valid_kge") %>% 
   group_by(modelversion, type) %>% 
   summarize(meanmean = mean(mean_kge), meanmax = mean(max_kge)) %>% 
   as.data.frame()
@@ -377,18 +389,15 @@ mtbl %>%
 ## unranked model performance by version
 p13 <-
   perftbl %>% 
-  filter(modelverison %in% models_for_paper) %>% 
+  filter(modelversion %in% models_all) %>% 
     group_by(modelversion) %>% 
     summarise(mean_validgap=mean(validgap), mean_meandiff = mean(meandiff), mean_valid_kge = mean(valid_kge),
               mean_maxkge=mean(max_kge), mean_mean_calib_kge=mean(mean_calib_kge)) %>% 
-    # arrange(desc(mean_maxkge), desc(mean_valid_kge)) %>% 
-    # mutate(rank=seq(1,nrow(.))) %>% 
     pivot_longer(cols = c(mean_maxkge,mean_valid_kge), names_to="metric_type", values_to="metric_value") %>% 
   ggplot(aes(x=as.factor(modelversion), y=metric_value, group=metric_type, color=metric_type))+
     geom_point(aes(shape=metric_type))+
     geom_line()+
-    # geom_label_repel(aes(label=modelversion), point.padding = 0.5, show.legend = FALSE,size=2,force=1.5)+
-    xlab("Model version")+
+    xlab("Model Configuration")+
     ylab("KGE")+
     ylim(c(0.7,0.95))+
     scale_color_manual(name="Metric",
@@ -409,8 +418,6 @@ p13 %>%
 
 ## calibration kge with validation points ----
 models_temp <- c(0,2,3,7,15,24,29,36)
-# models_temp <- c(0,36)
-
 
 p6 <-
   mtbl %>% 
@@ -428,19 +435,18 @@ p6 <-
              size=1)+
   facet_wrap(~watershedID,  ncol=4, scales="free", labeller = labeller_watershedID_type)+ # 
   xlab("KGE") + 
-  scale_fill_manual(name="Model\nVersion",
+  scale_fill_manual(name="Model\nConfiguration",
                     labels=sprintf("model_v%i",models_temp),
                     values=ggplotColours(n=length(models_temp)))+
   scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
                       values=c('red'))+
-  # theme(legend.position = "bottom")+
   theme(legend.position = "none")+
-  ylab("Model Version")+
+  ylab("Model Configuration")+
   xlim(c(0.55,0.95))
+
+p6
  
 p6 %>% 
-  # ggsave(filename="figures_KGE/performance_calib_modelv0-36xlimfixed_20211202.pdf", plot=.,
-  #        units="in", height=16, width=12)
   ggsave(filename="figures/performance_calib_modelv0-37xlimfixed_select_20220413.pdf", plot=.,
          units="in", height=5.5, width=7)
 ```
@@ -510,17 +516,15 @@ p3 <-
   param_data %>% 
   filter(type == "valid_kge") %>% 
     ggplot(aes(x=param_count, y=kge_metric))+
-  geom_point(data=param_data, aes(color=modelversion, shape=watershedID))+
-  geom_smooth(method = "lm")+
-  # facet_wrap(~type+watershedID, scales="free_y")+
-  scale_shape_manual(values=1:12) +
+  geom_point(data=param_data, color='black', alpha=0.5)+
+  geom_smooth(method = "lm")+  # , se=FALSE
   theme(legend.position="none")+
   ylab("Validation KGE")+
   xlab("Number of Calibrated Parameters")
 
 p3
 
-ggsave(sprintf("figures/kge_paramcount_notoverfit_20220416.pdf") ,
+ggsave(sprintf("figures/kge_paramcount_notoverfit_20230118.pdf") ,
                  plot=p3,units="in", height=4, width=5)
 
 ## statistical tests for each model watershed
@@ -544,22 +548,105 @@ dd <- as.data.frame(do.call(rbind,dd))
 dd$watershedID <- seq(1,12)
 dd$watershed_desc <- sprintf("%s (%s)", basins_chars_2$basin_id[1:12], basins_chars_2$state_full[1:12])
 
+formatv <- function(x, ...) {
+  mapply(format, x, scientific = abs(x) < 1e-2, digits=3, width=4, ...)
+} 
 
 ## make nice table
-dd %>% 
-  select(watershedID, watershed_desc, slope, slope_pvalue, intercept) %>% 
-  format(scientific=TRUE, digits=3) %>% 
-  # mutate_if(is.numeric, funs(as.character(signif(., 3)))) %>%
-  # mutate_if(is.numeric, format(scientific=TRUE)) %>% data.frame()
-  
+temp <- dd %>% 
+  select(watershedID, watershed_desc, slope, intercept, slope_pvalue ) 
+
+temp[,c(3:5)] <- lapply(temp[,c(3:5)], formatv) 
+temp
+
+temp %>% 
  kable(., 
-        digits=4, # digits doesn't work once converted to kable highlighting
+        digits=3, 
         align='rccc',
         format="latex",
         escape=FALSE,
         caption="test caption") %>% 
   kable_minimal(full_width=FALSE)
 ```
+
+```{r manuscript figures and analysis for delta KGE - overfitting check}
+
+# delta KGE version
+
+param_nums$modelversion <- as.factor(param_nums$modelversion)
+param_data <- left_join(validgap_tbl, param_nums, by="modelversion")
+
+param_data$watershedID <- as.factor(param_data$watershedID)
+
+param_data <- param_data %>% 
+  filter(watershedID %in% seq(1,12)) %>% 
+  filter(modelversion %in% models_for_paper)
+
+fit <- param_data %>% 
+  lm(validgap ~ param_count, data=.)
+
+summary(fit)
+
+p4  <-
+  param_data %>% 
+    ggplot(aes(x=param_count, y=validgap))+
+  geom_point(data=param_data, color='black', alpha=0.5)+
+  geom_smooth(method = "lm")+  # , se=FALSE
+  theme(legend.position="none")+
+  ylab("Validation Gap")+
+  xlab("Number of Calibrated Parameters")
+
+p4
+
+p4 %>% 
+ggsave(sprintf("figures/validgap_paramcount_notoverfit_20230118.pdf") ,
+                 plot=.,units="in", height=4, width=5)
+
+
+
+## statistical tests for each model watershed
+
+run_regression_bywatershed <- function(df=NULL, watershed=1) {
+  
+  temp <- df %>% 
+  filter(watershedID == watershed)
+
+  fit <- lm(validgap ~ param_count, data=temp)
+  
+  rv <-  data.frame(t(c(coef(fit), summary(fit)$coefficients[2,4])))
+  colnames(rv) <- c("intercept","slope","slope_pvalue")
+  
+  return(rv)
+}
+
+dd <- lapply(1:12, function(x) run_regression_bywatershed(df=param_data, watershed=x)) 
+dd <- as.data.frame(do.call(rbind,dd))
+dd$watershedID <- seq(1,12)
+dd$watershed_desc <- sprintf("%s (%s)", basins_chars_2$basin_id[1:12], basins_chars_2$state_full[1:12])
+
+formatv <- function(x, ...) {
+  mapply(format, x, scientific = abs(x) < 1e-2, digits=3, width=4, ...)
+} 
+
+## make nice table
+temp <- dd %>% 
+  select(watershedID, watershed_desc, slope, intercept, slope_pvalue ) 
+
+temp[,c(3:5)] <- lapply(temp[,c(3:5)], formatv) 
+temp
+
+temp %>% 
+ kable(., 
+        digits=3,
+        align='rccc',
+        format="latex",
+        escape=FALSE,
+        caption="test caption") %>% 
+  kable_minimal(full_width=FALSE)
+
+```
+
+
 
 ## Pareto evaluation of model versions
 
@@ -576,25 +663,24 @@ pareto <- temp %>%
   filter(modelversion %in% c(36,37,34,29,30))
 
 p10 <-
-  ggplot(data=temp, aes(x=mean_validgap, y=mean_meandiff))+ # , color=as.factor(modelversion)
+  ggplot(data=temp, aes(x=mean_validgap, y=mean_meandiff))+ 
     geom_point()+
+    geom_point(data=pareto, size=3)+
     geom_text_repel(aes(label=modelversion),
-      size=2,
-      arrow = NULL, # arrow(length = unit(0.02, "npc")),
-      # segment.color = NA,
-      min.segment.length = 0,
-      force=0.5,
-      box.padding = 0.75
+      size=3,
+      arrow = NULL,
+      min.segment.length = 5,
+      force=0.1,
+      box.padding = 0.25
     )+
     xlab("Validation Gap (max KGE calib - valid)")+
     ylab("Calibration Consistency (max KGE - mean KGE)")+
   geom_line(data=pareto, aes(x=mean_validgap, y=mean_meandiff), color='black', linetype='dashed')+
     theme(legend.position='none')+
-    xlim(c(0.10,0.14))+  # check bounds
-    ylim(c(0.00,0.04))   # check bounds
+    xlim(c(0.10,0.14))+  
+    ylim(c(0.00,0.04))  
 
 p10
-
 
 ## by average max calib KGE and average valid KGE
 temp <- perftbl %>% 
@@ -604,13 +690,18 @@ temp <- perftbl %>%
     summarise(mean_max_calib_kge=mean(calib_kge), 
               mean_valid_kge=mean(valid_kge)) 
 
+pareto <- 
+  temp %>% filter(modelversion == 36)
+
 p12 <-
-  ggplot(data=temp, aes(x=mean_valid_kge, y=mean_max_calib_kge))+ # , color=as.factor(modelversion)
+  ggplot(data=temp, aes(x=mean_valid_kge, y=mean_max_calib_kge))+ 
     geom_point()+
+    geom_point(data=pareto, size=3)+
     geom_text_repel(aes(label=modelversion),
           size=3,
-          arrow = arrow(length = unit(0.01, "npc")), force=0.5,
-          box.padding = 0.75
+          arrow = NULL,
+          force=0.1,
+          box.padding = 0.25
     )+
     xlab("Mean Validation KGE")+
     ylab("Mean of Max Calibration KGE")+
@@ -622,17 +713,15 @@ p12
 
 
 p10 <- p10 + 
-  # annotate(aes(x=0.1,y=0.035,))
  annotate("text",x=-Inf,y=Inf,label="(A)",fontface="bold",size=6, hjust=-0.1,vjust=1.2)
 
 p12 <- p12 + 
-  # annotate(aes(x=0.1,y=0.035,))
  annotate("text",x=Inf,y=-Inf,label="(B)",fontface="bold",size=6, hjust=-0.1,vjust=1.2)
 
 ## p10 and p12 in one pareto type plot
 list(p10,p12) %>% 
  ggarrange(plotlist=., align='v', ncol=1, common.legend=FALSE) %>% 
-  ggsave(sprintf("figures_KGE/performance_pareto_combined_20220413.pdf") ,
+  ggsave(sprintf("figures/performance_pareto_combined_20230308.pdf") ,
                  plot=.,units="in", height=8, width=5.5)
 ```
 
@@ -664,7 +753,7 @@ p15 <-
   scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
                       values=c('red'))+
   theme(legend.position = "none")+
-  ylab("Model Version")+
+  ylab("Model Configuration")+
   xlim(c(0.7,0.95))
 
 p15
@@ -699,14 +788,12 @@ p15 <-
   scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
                       values=c('red'))+
   theme(legend.position = "none")+
-  ylab("Model Version")+
-  xlim(c(0.7,0.95))
+  ylab("Model Configuration")
+  # xlim(c(0.35,0.95))
 
 p15
 
 p15 %>% 
-  ggsave(filename="figures/performance_calib_newcatchments_modelv0_modelv36_xlimfixed_select_withdists_20220519.pdf", plot=.,
+  ggsave(filename="figures/performance_calib_newcatchments_modelv0_modelv36_xlimfixed_select_withdists_20230308.pdf", plot=.,
          units="in", height=5.5, width=10)
-
 ```
-

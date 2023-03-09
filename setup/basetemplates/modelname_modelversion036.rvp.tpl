@@ -16,7 +16,6 @@
 #    par_sum_x09_x10 = {dpar[sum_x09_x10]} =  par_x09 + par_x10 = {par[x09]} + {par[x10]}
 #    par_pow_x04     = {dpar[pow_x04]}     =  10^(par_x04)       = 10^{par[x04]}
 #    par_pow_x11     = {dpar[pow_x11]}     =  10^(par_x11)       = 10^{par[x11]}
-#    par_pow_x37     = {dpar[pow_x37]}     =  10^(par_x37)       = 10^{par[x37]}
 #    par_pow_x40     = {dpar[pow_x40]}     =  10^(par_x40)       = 10^{par[x40]}
 #    par_half_x25    = {dpar[half_x25]}    =  par_x25 / 2        = {par[x25]} / 2   
 
@@ -61,65 +60,46 @@
 :EndSoilProfiles
 
 #-----------------------------------------------------------------
-# Terrain Classes
-#-----------------------------------------------------------------
-# :TerrainClasses
-#   :Attributes,        hillslope_len, drainage_dens,            lambda,       
-#        :Units,                   ??,            ??,                ??
-#     DEFAULT_T,                  1.0,           1.0,        par_x07    
-#   DEFAULT_T,                  1.0,           1.0,        {par[x07]}    
-#                                                     TOPMODEL_LAMBDA x(7)  
-# :EndTerrainClasses
-
-#-----------------------------------------------------------------
 # Global Parameters
 #-----------------------------------------------------------------
-:GlobalParameter        RAINSNOW_TEMP   par_x31 
-:GlobalParameter        RAINSNOW_DELTA  par_x32
-:GlobalParameter         SNOW_SWI_MIN par_x13            # x(13)    
-:GlobalParameter         SNOW_SWI_MAX par_sum_x13_x14    # x(13)+x(14) 
-# note: SNOW_SWI_MAX calculated as par_x13 + par_x14
-:GlobalParameter     SWI_REDUCT_COEFF par_x15            # x(15)
-:GlobalParameter             SNOW_SWI par_x19            # x(19)
-# :GlobalParameter             MAX_SWE_SURFACE par_x48     # x(48)
-#:GlobalParameter      TOC_MULTIPLIER 1.0                # 
+:GlobalParameter        RAINSNOW_TEMP   par_x31 		   # x(31)
+:GlobalParameter        RAINSNOW_DELTA  par_x32            # x(32)
+:GlobalParameter        SNOW_SWI 		par_x19            # x(19)
 
 #-----------------------------------------------------------------
 # Soil Parameters
 #-----------------------------------------------------------------
 :SoilParameterList
-  :Parameters,        POROSITY,      HYDRAUL_COND, WETTING_FRONT_PSI,  PERC_COEFF,  PET_CORRECTION,  BASEFLOW_COEFF,          B_EXP,   MAX_BASEFLOW_RATE,  BASEFLOW_N,   FIELD_CAPACITY,   SAT_WILT,  BASEFLOW_THRESH, MAX_CAP_RISE_RATE,
-       :Units,               -,      		mm/d,				 -mm,        1/d,               -,             1/d,           mm/d,  
-      TOPSOIL,             1.0,       par_pow_x37, 		     par_x36, 	 par_x28,      par_x08, 	    par_pow_x04, 	par_x02, 	  		 par_x05,     par_x06, 	par_sum_x09_x10, 	par_x09,		par_x38,    par_x53,
-      PHREATIC,             1.0,     		  0.0, 			     0.0, 	 par_x35,          0.0,         par_pow_x11,            0.0,         	 par_x44,     par_x12,              0.0,        0.0,		par_x39,    par_x54,
-      DEEP_GW,             1.0,      		  0.0,               0.0,		 0.0,		   0.0,          	    0.0,            0.0,            	 0.0,         0.0,              0.0,        0.0,		   0.0,      0.0,
-# 	  TOPSOIL,             1.0,      {par[x28]},      {par[x08]}, {dpar[pow_x04]}, {par[x02]}, {par[x03]},        {par[x05]}, {par[x06]}, {dpar[sum_x09_x10]}, {par[x09]},
-#     PHREATIC,             1.0,             0.0,             0.0, {dpar[pow_x11]},        0.0,        0.0,               0.0, {par[x12]},                 0.0,        0.0,   
-#     DEEP_GW,             1.0,             0.0,             0.0,             0.0,        0.0,        0.0,               0.0,        0.0,                 0.0,        0.0,
+  :Parameters,        POROSITY,      PERC_COEFF,  PET_CORRECTION,  BASEFLOW_COEFF, MAX_BASEFLOW_RATE,   BASEFLOW_N,   FIELD_CAPACITY,   SAT_WILT,  BASEFLOW_THRESH, MAX_CAP_RISE_RATE,
+       :Units,               -,      1/d,               -,             1/d,        
+      TOPSOIL,             1.0,      par_x28,      par_x08, 	    par_pow_x04, 	par_x05,     		par_x06, 	  par_sum_x09_x10, 	par_x09,	par_x38,    	par_x53,
+      PHREATIC,             1.0,     par_x35,      0.0,         	par_pow_x11,    par_x44,    		par_x12,      0.0,        		0.0,		par_x39,    	par_x54,
+      DEEP_GW,             1.0,      0.0,		   0.0,          	0.0,            0.0,         		0.0,          0.0,        		0.0,		0.0,      		0.0,
+#     TOPSOIL,             1.0,      x(28),        x(08), 	    	pow_x(04), 		x(05),     			x(06), 	  	  sum_x(09)_x(10), 	x(09),		x(38),    		x(53),
+#     PHREATIC,             1.0,     x(35),        0.0,         	pow_x(11),    	x(44),    			x(12),        0.0,        		0.0,		x(39),    		x(54),
+#     DEEP_GW,             1.0,      0.0,		   0.0,          	0.0,            0.0,         		0.0,          0.0,        		0.0,		0.0,      		0.0,
 :EndSoilParameterList
 
 # note: TOPSOIL FIELD_CAPACITY calculated as par_x9 + par_x10
 # note: TOPSOIL BASEFLOW_COEFF calculated as  10^ (par_x04)
 # note: PHREATIC BASEFLOW_COEFF calculated as  10^ (par_x11)
-# note: TOPSOIL HYDRAULIC_COND calculated as  10^ (par_x37)
-
 
 #-----------------------------------------------------------------
 # Land Use Parameters
 #-----------------------------------------------------------------
 :LandUseParameterList
-  :Parameters, MIN_MELT_FACTOR,     MAX_MELT_FACTOR,    MELT_FACTOR,   DD_MELT_TEMP,  DD_AGGRADATION, REFREEZE_FACTOR, REFREEZE_EXP, DD_REFREEZE_TEMP, HMETS_RUNOFF_COEFF, DEP_SEEP_K, ABST_PERCENT, DEP_MAX,  AET_COEFF,
-       :Units,          mm/d/C,              mm/d/C,         mm/d/C,               C,            1/mm,          mm/d/C,            -,                C,                  -,        1/d,            -,    [mm],     -,
-    [DEFAULT],      par_x24, 		par_sum_x24_x25, par_sum_x24_halfx25,      par_x26,      par_x27,      			par_x18,   par_x17,       par_x16,         par_x01,        par_pow_x40,      par_x41, par_x42,    par_x43,
-#   [DEFAULT],      {par[x24]}, {dpar[sum_x24_x25]}, {dpar[sum_x24_halfx25]},       {par[x26]},      {par[x27]},      {par[x18]},   {par[x17]},       {par[x16]},         {par[x01]},  {dpar[pow_x40]}, {par[x41]}, {par[x42]},  {par[x43]}, 
-#                        x(24),         x(24)+x(25),  x(24)+0.5*x(25),          x(26),           x(27),           x(18),        x(17),            x(16),              x(01),        
+  :Parameters, MIN_MELT_FACTOR,     MAX_MELT_FACTOR,    MELT_FACTOR,   		   DD_MELT_TEMP,  DD_AGGRADATION, REFREEZE_FACTOR, HMETS_RUNOFF_COEFF, DEP_SEEP_K, 		ABST_PERCENT, 	DEP_MAX,
+       :Units,          mm/d/C,              mm/d/C,         mm/d/C,           C,             1/mm,           mm/d/C,     		-,        			1/d,            -,    	  		[mm],
+    [DEFAULT],      par_x24, 		par_sum_x24_x25, par_sum_x24_halfx25,      par_x26,       par_x27,        par_x18,     		par_x01,        	par_pow_x40,  	par_x41, 		par_x42, 
+#   [DEFAULT],      {par[x24]}, {dpar[sum_x24_x25]}, {dpar[sum_x24_halfx25]},  {par[x26]},    {par[x27]},     {par[x18]},   	{par[x01]},  	   {dpar[pow_x40]}, {par[x41]}, 	{par[x42]}, 
+#                        x(24),         x(24)+x(25),  x(24)+0.5*x(25),          x(26),        x(27),          x(18),        	x(01),        	   pow_x(40),		x(41),			x(42)
 :EndLandUseParameterList
 :LandUseParameterList
-  :Parameters,   GAMMA_SHAPE,     GAMMA_SCALE,    GAMMA_SHAPE2,    GAMMA_SCALE2,    FOREST_SPARSENESS,   ROUGHNESS,   WIND_EXPOSURE,   
-       :Units,             -,               -,               -,               -,                    -,            m,            -,        
-    [DEFAULT],    par_x20,       	par_x21,          par_x22,      	par_x23,      par_x48,      			   0.5,          par_x45,    
-#   [DEFAULT],    {par[x20]},       {par[x21]},      {par[x22]},      {par[x23]},     0.0,  	     		   0.5,      {par[x45]},   
-    #                  x(20),           x(21),           x(22),           x(23),      0.0, 	      			   0.5,         x(45),      
+  :Parameters,   GAMMA_SHAPE,     GAMMA_SCALE,    GAMMA_SHAPE2,    GAMMA_SCALE2,    FOREST_SPARSENESS,   ROUGHNESS,  
+       :Units,             -,               -,               -,               -,                    -,            m,        
+    [DEFAULT],    par_x20,       	par_x21,          par_x22,      	par_x23,      par_x48,      			   0.5,    
+#   [DEFAULT],    {par[x20]},       {par[x21]},      {par[x22]},      {par[x23]},     0.0,  	     		   0.5,   
+    #                  x(20),           x(21),           x(22),           x(23),      0.0, 	      			   0.5,   
 :EndLandUseParameterList
 
 ## GAMMA_SCALE:   par_x21  = {par[x21]}    =  par_one / par_ratio_x21       = 1 / {dpar[ratio_x21]}
@@ -136,9 +116,9 @@
 ### MAX_SNOW_CAPACITY = MAX_CAPACITY*constant     = par_x52*par_x56 = {par[x52]}*{par[x56]} = par_prod_x52_x56
 #
 :VegetationParameterList
-  :Parameters,  RAIN_ICEPT_PCT,  SNOW_ICEPT_PCT,    SAI_HT_RATIO,  DRIP_PROPORTION,   MAX_CAPACITY,  MAX_SNOW_CAPACITY
-       :Units,               -,               -,               -,           -,            mm,                  mm,
-    [DEFAULT],        par_x49,   par_prod_x49_x56,          0.0,        par_x51,       par_x52,         par_prod_x52_x56
+  :Parameters,  RAIN_ICEPT_PCT,  SNOW_ICEPT_PCT,    SAI_HT_RATIO,  MAX_CAPACITY,  MAX_SNOW_CAPACITY
+       :Units,               -,               -,               -,    mm,                  mm,
+    [DEFAULT],        par_x49,   par_prod_x49_x56,          0.0,   par_x52,         par_prod_x52_x56
 :EndVegetationParameterList
 
 :SeasonalRelativeLAI

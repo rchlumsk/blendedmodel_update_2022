@@ -53,7 +53,7 @@ BeginParams
   par_x22         3.0      2.0       15.0   none   none     none # LandUseParameterList:    GAMMA_SHAPE2
   par_ratio_x23   0.2      0.125     10.0   none   none     none # LandUseParameterList:    1 / GAMMA_SCALE2
   par_x24         1.5      1.5       3.0    none   none     none # LandUseParameterList:    MIN_MELT_FACTOR
-  par_x25         1.0      0.0       5.0    none   none     none # LandUseParameterList:    MAX_MELT_FACTOR = MIN_MELT_FACTOR + x06
+  par_x25         1.0      0.0       5.0    none   none     none # LandUseParameterList:    MAX_MELT_FACTOR = MIN_MELT_FACTOR + x25
   par_x26         0.0     -1.0       1.0    none   none     none # LandUseParameterList:    DD_MELT_TEMP
   par_x27         0.1      0.01      0.2    none   none     none # LandUseParameterList:    DD_AGGRADATION
   par_x48         0.5      0.0       0.99   none   none     none # LandUseParameterList:    FOREST_SPARSENESS
@@ -87,23 +87,139 @@ BeginTiedParams
   #
   par_one 0 1.000 free
   #
-  par_sum_x24_x25 2 par_x24 par_x25 linear 0.00 1.00 1.00 0.00 free
-  par_half_x25 	  1 par_x25  		linear 0.5     0.00 	   free
-  par_sum_x24_halfx25  2 par_x24 par_half_x25 linear 0.00 1.00 1.00 0.00 free
+  par_sum_x24_x25 2 par_x24 par_x25 linear 0.00 1.00 1.00 0.00 free  
+  # par_sum_x24_x25 = MAX_MELT_FACTOR = MIN_MELT_FACTOR + scalar,  which ensures MAX >= MIN
+  # using above Ostrich ranges, note that the 1.5 <= MAX_MELT_FACTOR <= 8.0
+  # Ostrich syntax:
+  # Xtied =(c3 * X1 * X2) + (c2 * X2) + (c1 * X1) + c0, required syntax to translate
+  # par_sum_x24_x25 2 X1 X2 linear c3 c2 c1 c0 free  
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 1.0
+  # --> c3 = 0.0  
+  
+  par_half_x25 	  1 par_x25  		linear 0.5     0.00 	   free  
+  par_sum_x24_halfx25  2 par_x24 par_half_x25 linear 0.00 1.00 1.00 0.00 free  
+  # Take halfway point between MIN_MELT_FACTOR and MAX_MELT_FACTOR as MELT_FACTOR
+  # par_half_x25 = half range of MAX_MELT_FACTOR - MIN_MELT_FACTOR
+  # Xtied =(c1 * X1) + c0
+  # par_half_x25 	  1 X1  linear c1 c0 free  
+  # --> c0 = 0.0
+  # --> c1 = 0.5
+  # Compute MELT_FACTOR
+  # par_sum_x24_halfx25  2 par_x24 par_half_x25 linear 0.00 1.00 1.00 0.00 free 
+  # Xtied =(c3 * X1 * X2) + (c2 * X2) + (c1 * X1) + c0
+  # par_sum_x24_halfx25  2 X1 X2 linear c3 c2 c1 c0 free  
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 1.0
+  # --> c3 = 0.0  
+  
   par_sum_x09_x10 2 par_x09 par_x10 linear 0.00 1.00 1.00 0.00 free
+  # Compute FIELD_CAPACITY = SAT_WILT TOPSOIL + par_x09, ensures FIELD_CAPACITY >= SAT_WILT (wilting point)
+  # Xtied =(c3 * X1 * X2) + (c2 * X2) + (c1 * X1) + c0, required syntax to translate
+  # par_sum_x09_x10  2 X1 X2 linear c3 c2 c1 c0 free  
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 1.0
+  # --> c3 = 0.0 
+  
   par_pow_x04     1 par_x04         exp    10.0 1.00 1.00 0.00 free
+  # Compute BASEFLOW_COEFF in TOPSOIL using logarithmic sampling instead of linear, due to range of plausible BASEFLOW_COEFF values
+  # BASEFLOW_COEFF = par_pow_x04 = 10^par_x04
+  # Xtied =c2 * b^(c1*X) + c0
+  # par_pow_x04     1 X1 exp   b c2 c1 c0 free
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 1.0
+  # --> b  = 10.0    
+  
   par_pow_x11     1 par_x11         exp    10.0 1.00 1.00 0.00 free
+  # Compute BASEFLOW_COEFF in PHREATIC soil using logarithmic sampling instead of linear, due to range of plausible BASEFLOW_COEFF values
+  # BASEFLOW_COEFF = par_pow_x11 = 10^par_x11
+  # Xtied =c2 * b^(c1*X) + c0
+  # par_pow_x11     1 X1 exp   b c2 c1 c0 free
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 1.0
+  # --> b  = 10.0    
+  
   par_half_x29 	  1 par_x29  		linear 500.0     0.00 	   free
+  # Compute half of TOPSOIL storage thickness for initial conditions, multiplying by 1000 for unit conversion metres to millimetres (1000*0.5)
+  # Xtied =(c1 * X1) + c0
+  # par_half_x29 1 X1 linear c1 c0
+  # --> c0 = 0.0
+  # --> c1 = 500
+  
   par_half_x30 	  1 par_x30  		linear 500.0     0.00 	   free
+  # Compute half of PHREATIC storage thickness for initial conditions, multiplying by 1000 for unit conversion metres to millimetres (1000*0.5)
+  # Xtied =(c1 * X1) + c0
+  # par_half_x30 1 X1 linear c1 c0
+  # --> c0 = 0.0
+  # --> c1 = 0.5
+    
   par_pow_x40     1 par_x40         exp    10.0 1.00 1.00 0.00 free
+  # Compute seepage rate DEP_SEEP_K using logarithmic sampling instead of linear, due to range of plausible DEP_SEEP_K values
+  # DEP_SEEP_K = par_pow_x40 = 10^par_x40
+  # Xtied =c2 * b^(c1*X) + c0
+  # par_pow_x40     1 X1 exp   b c2 c1 c0 free
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 1.0
+  # --> b  = 10.0  
+  
   par_prod_x49_x56 2 par_x49 par_x56 linear 1.00 0.00 0.00 0.00 free
+  # Compute SNOW_ICEPT_PCT as a product of RAIN_ICEPT_PCT
+  # SNOW_ICEPT_PCT = par_prod_x49_x56 = par_x49 * par_x56 = RAIN_ICEPT_PCT * scalar[1,1.5]
+  # Xtied =(c3 * X1 * X2) + (c2 * X2) + (c1 * X1) + c0, required syntax to translate
+  # par_prod_x49_x56 2 X1 X2 linear c3 c2 c1 c0 free  
+  # --> c0 = 0.0
+  # --> c1 = 0.0
+  # --> c2 = 0.0
+  # --> c3 = 1.0  
+  
   par_prod_x52_x56 2 par_x52 par_x56 linear 1.00 0.00 0.00 0.00 free
+  # Compute MAX_SNOW_CAPACITY as a product of MAX_CAPACITY
+  # MAX_SNOW_CAPACITY = par_prod_x52_x56 = par_x52 * par_x56 = MAX_CAPACITY * scalar[1,1.5]
+  # Xtied =(c3 * X1 * X2) + (c2 * X2) + (c1 * X1) + c0, required syntax to translate
+  # par_prod_x52_x56 2 X1 X2 linear c3 c2 c1 c0 free  
+  # --> c0 = 0.0
+  # --> c1 = 0.0
+  # --> c2 = 0.0
+  # --> c3 = 1.0  
+  
   #
   par_x21     2 par_one par_ratio_x21 ratio 1.00 0.00 1.00 0.00 free
+  # Compute GAMMA_SCALE as 1 / sampled parameter par_ratio_x21 due to range of GAMMA_SCALE
+  # GAMMA_SCALE = par_x21 = 1 / par_ratio_x21
+  # Xtied =(c3 * X1 + c2) / (c1 * X2 + C0)
+  # par_x21     2 X1 X2 ratio c3 c2 c1 c0 free
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 0.0
+  # --> c3 = 1.0 
+  
   par_x23     2 par_one par_ratio_x23 ratio 1.00 0.00 1.00 0.00 free
-  #
+  # Compute GAMMA_SCALE2 as 1 / sampled parameter par_ratio_x21 due to range of GAMMA_SCALE2
+  # GAMMA_SCALE2 = par_x23 = 1 / par_ratio_x23
+  # Xtied =(c3 * X1 + c2) / (c1 * X2 + C0)
+  # par_x23     2 X1 X2 ratio c3 c2 c1 c0 free
+  # --> c0 = 0.0
+  # --> c1 = 1.0
+  # --> c2 = 0.0
+  # --> c3 = 1.0  
+  
   ## SeasonalRelativeLAI calculations
   par_sum_RLAI_01 1   par_x55   linear   -0.8   1.0   free 
+  # Compute the monthly relative LAI as 1.0 - parameterized scalar * fixed defined factor for the month in North American catchments
+  # Allows calibration to flatten or exaggerate the relative LAI change each month over the course of the year
+  # January relative LAI = par_sum_RLAI_01  = 1 - par[x55]*0.8 = 1 - par_x55*0.8  
+  # Xtied =(c1 * X1) + c0
+  # par_half_x25 	  1 X1  linear c1 c0 free  
+  # --> c0 = 1.0
+  # --> c1 = -0.8
+  
+  # repeat for February - December with different monthly fixed factors
   par_sum_RLAI_02 1   par_x55   linear   -0.8   1.0   free 
   par_sum_RLAI_03 1   par_x55   linear   -0.7   1.0   free 
   par_sum_RLAI_04 1   par_x55   linear   -0.5   1.0   free 
