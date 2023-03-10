@@ -432,14 +432,14 @@ p6 <-
   geom_boxplot(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.4 )+
   geom_point(data=max_tbl[max_tbl$type=="valid_kge" & max_tbl$modelversion %in% models_temp & max_tbl$watershedID %in% seq(1,12),], 
              aes(x=kge_metric, y=modelversion, colour=as.factor(type)),
-             size=1)+
+             size=1.5, shape=17)+
   facet_wrap(~watershedID,  ncol=4, scales="free", labeller = labeller_watershedID_type)+ # 
   xlab("KGE") + 
   scale_fill_manual(name="Model\nConfiguration",
                     labels=sprintf("model_v%i",models_temp),
                     values=ggplotColours(n=length(models_temp)))+
   scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
-                      values=c('red'))+
+                      values=c('orange'))+
   theme(legend.position = "none")+
   ylab("Model Configuration")+
   xlim(c(0.55,0.95))
@@ -741,45 +741,11 @@ p15 <-
   filter(modelversion %in% models_temp) %>%
   filter(watershedID %in% seq(13,24)) %>%
   ggplot() +
-  geom_boxplot(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.4 )+
-  geom_point(data=max_tbl[max_tbl$type=="valid_kge" & max_tbl$modelversion %in% models_temp & max_tbl$watershedID %in% seq(13,24),], 
-             aes(x=kge_metric, y=modelversion, colour=as.factor(type)),
-             size=1)+
-  facet_wrap(~watershedID,  ncol=4, scales="free", labeller = labeller_watershedID_type_2)+ # 
-  xlab("KGE") + 
-  scale_fill_manual(name="Model\nVersion",
-                    labels=sprintf("model_v%i",models_temp),
-                    values=ggplotColours(n=length(models_temp)))+
-  scale_colour_manual(name="",labels=c("KGE VALID\n(from best calib)"),
-                      values=c('red'))+
-  theme(legend.position = "none")+
-  ylab("Model Configuration")+
-  xlim(c(0.7,0.95))
-
-p15
-
-p15 %>% 
-  ggsave(filename="figures/performance_calib_newcatchments_modelv0_modelv36_xlimfixed_select_20220519.pdf", plot=.,
-         units="in", height=5.5, width=10)
-
-```
-
-```{r manuscript figure - comparison for newcatchments}
-## watersheds 13-24
-models_temp <- c(0,36)
-p15 <-
-  mtbl %>% 
-  filter(type == "calib_kge") %>%
-  mutate(name = fct_reorder(modelversion, desc(as.numeric(modelversion)))) %>%
-  
-  filter(modelversion %in% models_temp) %>%
-  filter(watershedID %in% seq(13,24)) %>%
-  ggplot() +
   geom_boxplot(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.8, width=0.4 )+
   ggdist::stat_halfeye(aes(x=kge_metric, y=modelversion, fill= modelversion), alpha=0.8, adjust=0.75, justification=-.3, .width=0, point_colour=NA )+
   geom_point(data=max_tbl[max_tbl$type=="valid_kge" & max_tbl$modelversion %in% models_temp & max_tbl$watershedID %in% seq(13,24),], 
              aes(x=kge_metric, y=modelversion, colour=as.factor(type)),
-             size=1)+
+             size=1.5, shape=17)+
   facet_wrap(~watershedID,  ncol=4, scales="free", labeller = labeller_watershedID_type_2)+ # 
   xlab("KGE") + 
   scale_fill_manual(name="Model\nVersion",
