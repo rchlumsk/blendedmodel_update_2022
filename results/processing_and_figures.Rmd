@@ -333,7 +333,7 @@ p1 %>%
   ggsave("figures/selected_random_catchments_20230609.pdf", plot=., width=6, height=5)
 ```
 
-```{r manuscript table - properties for newly selected stations (Table 1)}
+```{r manuscript table - properties for newly selected stations (Table S1)}
 basins_chars_2[1:36,] %>% 
   
   select(catchid, basin_id, state,area_km2, elevation_m, 
@@ -427,7 +427,7 @@ p13 <-
     geom_line()+
     xlab("Model Configuration")+
     ylab("KGE")+
-    ylim(c(0.7,0.95))+
+    ylim(c(0.725,0.925))+
     scale_color_manual(name="Metric",
                        values=c('black','orange'),
                        labels=c("max calib\nKGE (avg)", "valid\nKGE (avg)"))+
@@ -802,8 +802,8 @@ dd <-
   filter(watershedID %in% seq(13,36))
 
 
-df <- data.frame(matrix(NA,nrow=length(rep(seq(13,36),2)),ncol=5))
-colnames(df) <- c("watershedID","kgetype", "median_0","median_36","pval")
+df <- data.frame(matrix(NA,nrow=length(rep(seq(13,36),2)),ncol=6))
+colnames(df) <- c("watershedID","kgetype", "median_0","median_36","median_diff","pval")
 
 # c("watershedID","kgetype", "median_0_calib","median_36_calib","pval_lt_calib",
 #   "median_0_valid","median_36_valid","pval_lt_valid")
@@ -836,7 +836,9 @@ for (i in 1:nrow(df)) {
       
     df[i,]$median_0 <- median(x)
     df[i,]$median_36 <- median(y)
+    df[i,]$median_diff <- df[i,]$median_36 - df[i,]$median_0
     df[i,]$pval <- wtest$p.value
+    
 }
 
 nrow(df[df$kgetype=="calib_kge" & df$pval <0.05 & df$median_0 < df$median_36,]) # 0 < 36 in 16 for calib
@@ -858,22 +860,24 @@ formatv <- function(x, ...) {
 temp <- df %>% 
   select(-kgetype) 
 
-temp[,c(2:4)] <- lapply(temp[,c(2:4)], formatv) 
+temp[,c(2:5)] <- lapply(temp[,c(2:5)], formatv) 
 temp
+df$median_diff <- temp$median_diff
 
 df %>% 
   select(-kgetype) %>% 
+  select(-median_diff) %>% 
   dplyr::mutate_if(is.numeric, funs(as.character(format(., digits=3)))) %>% 
   # select(-kgetype) %>% 
   kable(., 
         digits=3, # digits doesn't work once converted to kable highlighting
-        align='rrcc',
+        align='rcccc',
         format="latex",
         escape=FALSE,
         caption="test caption") %>% 
   kable_minimal(full_width=FALSE)
-  
 ```
+
 
 ```{r setup additional columns to test for calib and valid period differences}
 
@@ -1031,3 +1035,119 @@ summary(fit)
 variables_to_test
 
 ```
+
+
+```{r table of mean differences in original and blended v2}
+# improvement over original model in all basins
+tt <- mtbl %>% 
+  arrange(modelversion,watershedID,iteration,type) %>% 
+  group_by(watershedID,modelversion,type) %>% 
+  filter(modelversion %in% c(0,36)) %>%
+  # filter(watershedID %in% seq(13,24)) %>%
+  arrange(modelversion,watershedID,type) %>% 
+  group_by(modelversion,watershedID,type) %>%
+  summarise(mean_kge=mean(kge_metric)) %>%
+  group_by(watershedID,type) %>% 
+  pivot_wider(names_from=modelversion, values_from = mean_kge, names_prefix = "modelversion") %>% 
+  mutate(meandiff=modelversion36-modelversion0) %>% 
+  pivot_wider(names_from=type, values_from=c(modelversion0, modelversion36, meandiff)) %>% 
+  data.frame() %>% 
+  cbind(., basins_chars_2)
+
+```
+
+```{r analysis of correlating catchment improvement to hydrologic properties}
+
+  ## how many of 36 catchments with calib diff >= 0.05
+  tt[tt$meandiff_calib_kge > 0.05,] %>% nrow()
+
+  ## how many of 36 catchments with calib diff >= 0.1
+  tt[tt$meandiff_calib_kge > 0.1,] %>% nrow()
+  
+  ## how many of 36 catchments with valid diff >= 0.05
+  tt[tt$meandiff_valid_kge > 0.05,] %>% nrow()
+
+  ## how many of 36 catchments with valid diff >= 0.1
+  tt[tt$meandiff_valid_kge > 0.1,] %>% nrow()
+  
+  # all catchments
+  mean(tt$meandiff_calib_kge)
+  mean(tt$meandiff_valid_kge)
+  
+  # MOPEX only catchments
+  mean(tt$meandiff_calib_kge[1:12])
+  mean(tt$meandiff_valid_kge[1:12])
+  
+  # independent only catchments
+  mean(tt$meandiff_calib_kge[13:36])
+  mean(tt$meandiff_valid_kge[13:36])
+
+
+  ### testing meandiff regressions to various hydrologic characteristics
+  
+  ## not significant results
+  fit <- lm("meandiff_calib_kge ~ annual_average_precip_mm", data=tt)
+  summary(fit)
+  
+  fit <- lm("meandiff_calib_kge ~ peak_flow_calib", data=tt)
+  summary(fit)
+  
+  fit <- lm("meandiff_calib_kge ~ dryness_index", data=tt)
+  summary(fit)
+  
+  
+  ## significant results at 5% level
+  fit <- lm("meandiff_calib_kge ~ runoff_ratio", data=tt)
+  summary(fit)
+  plot(tt$runoff_ratio, tt$meandiff_calib_kge)
+  abline(fit)
+  
+  fit <- lm("meandiff_calib_kge ~ evap_index", data=tt)
+  summary(fit)
+  plot(tt$evap_index, tt$meandiff_calib_kge)
+  abline(fit)
+  
+  ### repeat for validation meandiff 
+  
+  ## not significant results
+  fit <- lm("meandiff_valid_kge ~ annual_average_precip_mm", data=tt)
+  summary(fit)
+  
+  fit <- lm("meandiff_valid_kge ~ peak_flow_calib", data=tt)
+  summary(fit)
+  
+  fit <- lm("meandiff_valid_kge ~ dryness_index", data=tt)
+  summary(fit)
+  
+  
+  ## not significant results in validation
+  fit <- lm("meandiff_valid_kge ~ runoff_ratio", data=tt)
+  summary(fit)
+  plot(tt$runoff_ratio, tt$meandiff_valid_kge)
+  abline(fit)
+  
+  fit <- lm("meandiff_valid_kge ~ evap_index", data=tt)
+  summary(fit)
+  plot(tt$evap_index, tt$meandiff_valid_kge)
+  abline(fit)
+```
+
+```{r Exporting table of mean differences}
+tt <- tt %>% 
+  select(watershedID,state,modelversion0_calib_kge,modelversion36_calib_kge,meandiff_calib_kge,
+         modelversion0_valid_kge,modelversion36_valid_kge,meandiff_valid_kge)
+tt$meandiff_calib_kge  <-  formatv(tt$meandiff_calib_kge)
+tt$meandiff_valid_kge  <-  formatv(tt$meandiff_valid_kge)
+
+tt %>% 
+  dplyr::mutate_if(is.numeric, funs(as.character(format(., digits=3)))) %>% 
+  kable(., 
+        digits=3, # digits doesn't work once converted to kable highlighting
+        align='rcccc',
+        format="latex",
+        escape=FALSE,
+        caption="test caption") %>% 
+  kable_minimal(full_width=FALSE)
+```
+
+
